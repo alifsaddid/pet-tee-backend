@@ -2,15 +2,19 @@ from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
+from dotenv import load_dotenv
 
 from alembic import context
 
-# Import Base from your application
 from app.core.db.session import Base
 from app.core.config import settings
 
-# Import all your models here so Alembic can discover them
+# Import all models here so Alembic can discover them
 import app.models.user
+import app.models.task
+
+
+load_dotenv()
 
 config = context.config
 

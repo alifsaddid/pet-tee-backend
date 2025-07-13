@@ -10,10 +10,12 @@ from app.utils.auth import get_password_hash, verify_password, create_access_tok
 
 
 class AuthService:
-    @staticmethod
-    async def create_user(user_data: UserCreate, db: Session) -> User:
+    def __init__(self, db: Session):
+        self.db = db
+
+    async def create_user(self, user_data: UserCreate) -> User:
         # existing_user = db.query(User).filter(User.username == user_data.username).first()
-        existing_user = await db.scalar(
+        existing_user = await self.db.scalar(
             select(User)
             .where(User.username == user_data.username)
         )
@@ -30,15 +32,14 @@ class AuthService:
             role=UserRole.USER
         )
 
-        db.add(new_user)
-        await db.commit()
-        await db.refresh(new_user)
+        self.db.add(new_user)
+        await self.db.commit()
+        await self.db.refresh(new_user)
 
         return new_user
 
-    @staticmethod
-    async def authenticate_user(username: str, password: str, db: Session):
-        user = await db.scalar(
+    async def authenticate_user(self, username: str, password: str):
+        user = await self.db.scalar(
             select(User)
             .where(User.username == username)
         )
@@ -46,8 +47,7 @@ class AuthService:
             return None
         return user
 
-    @staticmethod
-    async def create_user_token(user: User):
+    async def create_user_token(self, user: User):
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={

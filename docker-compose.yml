@@ -71,6 +71,24 @@ services:
       - REDIS_URL=redis://redis:6379/0
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
+  consumer_service:
+    build:
+      context: .
+      dockerfile: Dockerfile.consumer
+    container_name: redis_queue_consumer
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/mydatabase
+      - REDIS_URL=redis://redis:6379/0
+      - SYNC_DATABASE_URL=postgresql://postgres:postgres@db:5432/mydatabase
+
   db:
     image: postgres:15
     container_name: my_postgres
@@ -83,6 +101,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7
@@ -92,6 +115,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

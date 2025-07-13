@@ -1,5 +1,7 @@
-from fastapi import FastAPI
-from app.routers import health, auth
+from fastapi import FastAPI, Depends
+from app.routers import health, auth, tasks
+from app.core.redis import get_redis
+import redis.asyncio as redis
 
 app = FastAPI(
     title="Pet-Tee API",
@@ -16,6 +18,20 @@ app = FastAPI(
 )
 
 
-# Include routers
+@app.on_event("startup")
+async def startup_db_client():
+    # Initialize Redis connection on startup
+    redis_client = await get_redis()
+    app.state.redis = redis_client
+
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    # Close Redis connection on shutdown
+    if hasattr(app.state, "redis"):
+        await app.state.redis.close()
+
+
 app.include_router(health.router, tags=["health"])
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
