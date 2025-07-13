@@ -1,0 +1,10 @@
+# Alembic Migrations
+
+This directory contains database migration scripts for the Pet-Tee Backend application.
+
+## Basic Usage
+
+- Generate a new migration: `alembic revision --autogenerate -m "Description of changes"`
+- Run migrations: `alembic upgrade head`
+- Rollback to previous version: `alembic downgrade -1`
+- View migration history: `alembic history`

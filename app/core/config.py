@@ -1,6 +1,7 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    SYNC_DATABASE_URL: str
     DATABASE_URL: str
     REDIS_URL: str
     SECRET_KEY: str

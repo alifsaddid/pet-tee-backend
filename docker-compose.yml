@@ -1,5 +1,59 @@
 version: '3.8'
+version: '3.8'
 
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/pet_tee_db
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here-change-this-in-production}
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+    depends_on:
+      - db
+      - redis
+    command: >
+      sh -c "alembic upgrade head && 
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=pet_tee_db
+    ports:
+      - "5432:5432"
+    platform: linux/amd64 # This ensures compatibility with Mac M1
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    platform: linux/amd64 # This ensures compatibility with Mac M1
+
+  worker:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/pet_tee_db
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here-change-this-in-production}
+    depends_on:
+      - redis
+      - db
+    command: rq worker --url redis://redis:6379/0 default
+
+volumes:
+  postgres_data:
 services:
   app:
     build: .
