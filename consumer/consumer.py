@@ -68,10 +68,11 @@ class RedisConsumer:
             # Simulate task processing
             logger.info(f"Processing task {task_id}: {task.animal} with text '{task.text}'")
 
-            print("env:", os.environ.get("REPLICATE_API_TOKEN"))
             output = replicate.run(
                 "black-forest-labs/flux-schnell",
-                input={"prompt": f"Generate a high-quality, front-facing portrait of a {task.animal} of any breed or species. The animal should be looking directly at the camera with a joyful or expressive face. It must be wearing a plain white shirt that has {task.text} text on it. Optionally, the animal can also wear stylish accessories like a hat, sunglasses, or scarf. Use a minimal, soft background to keep the focus on the animal."}
+                input={
+                    "prompt": f"Generate a high-quality, front-facing portrait of a {task.animal} of any breed or species. The animal should be looking directly at the camera with a joyful or expressive face. It must be wearing a plain white shirt that has {task.text} text on it. Optionally, the animal can also wear stylish accessories like a hat, sunglasses, or scarf. Use a minimal, soft background to keep the focus on the animal."
+                }
             )
 
             with open(f'{task.id}.png', 'wb') as f:
@@ -84,6 +85,7 @@ class RedisConsumer:
             task.image_uri = uri
             await session.commit()
             logger.info(f"Task {task_id} completed successfully")
+
         except Exception as e:
             logger.error(f"Error processing task {task_id}: {str(e)}")
             try:
@@ -128,7 +130,6 @@ class RedisConsumer:
 
         while self.running and not self.shutdown_event.is_set():
             try:
-                # BRPOP blocks until a message is available
                 result = await self.redis_client.brpop(self.queue_name, timeout=1)
 
                 if not result:
@@ -150,7 +151,6 @@ class RedisConsumer:
 
             except redis.RedisError as e:
                 logger.error(f"Redis error: {str(e)}")
-                # Reconnect after a short delay
                 await asyncio.sleep(5)
                 try:
                     await self.connect()
@@ -178,12 +178,9 @@ async def main() -> None:
     """Main entry point for the consumer"""
     consumer = RedisConsumer()
 
-    # Setup signal handling for graceful shutdown
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(
-            sig, lambda: asyncio.create_task(consumer.shutdown())
-        )
+        loop.add_signal_handler(sig, lambda: asyncio.create_task(consumer.shutdown()))
 
     try:
         await consumer.listen()
@@ -195,6 +192,14 @@ async def main() -> None:
 
 if __name__ == "__main__":
     load_dotenv()
+
+    # Inject credentials from GOOGLE_CREDENTIALS_JSON into a temp file
+    if "GOOGLE_CREDENTIALS_JSON" in os.environ:
+        creds_path = "/tmp/gcp-creds.json"
+        with open(creds_path, "w") as f:
+            f.write(os.environ["GOOGLE_CREDENTIALS_JSON"])
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
+
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
