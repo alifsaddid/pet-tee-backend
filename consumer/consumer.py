@@ -193,11 +193,11 @@ async def main() -> None:
 if __name__ == "__main__":
     load_dotenv()
 
-    # Inject credentials from GOOGLE_CREDENTIALS_JSON into a temp file
     if "GOOGLE_CREDENTIALS_JSON" in os.environ:
         creds_path = "/tmp/gcp-creds.json"
+        parsed = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
         with open(creds_path, "w") as f:
-            f.write(os.environ["GOOGLE_CREDENTIALS_JSON"])
+            json.dump(parsed, f)
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
 
     try:
