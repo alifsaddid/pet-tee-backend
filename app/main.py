@@ -1,3 +1,5 @@
+import subprocess
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends
 from app.routers import health, auth, tasks
@@ -18,6 +20,10 @@ app = FastAPI(
         "displayRequestDuration": True,  # Show request duration
     }
 )
+
+@app.on_event("startup")
+async def run_migrations():
+    subprocess.run(["alembic", "upgrade", "head"])
 
 app.add_middleware(
     CORSMiddleware,
