@@ -4,7 +4,6 @@ import logging
 import os
 import signal
 import sys
-from typing import Dict, Any
 
 import redis.asyncio as redis
 import replicate
@@ -18,6 +17,7 @@ from app.models.task import Task, TaskStatus
 
 from datetime import datetime
 from google.cloud import storage
+from google.oauth2 import service_account
 
 # Configure logging
 logging.basicConfig(
@@ -35,7 +35,6 @@ class RedisConsumer:
         self.shutdown_event = asyncio.Event()
 
     async def connect(self) -> None:
-        """Establish connection to Redis server"""
         try:
             self.redis_client = redis.from_url(settings.REDIS_URL)
             await self.redis_client.ping()
@@ -45,7 +44,6 @@ class RedisConsumer:
             raise
 
     async def process_task(self, task_id: str, session: AsyncSession) -> None:
-        """Process a task based on its type and payload"""
         logger.info(f"Processing task: {task_id}")
 
         try:
@@ -53,19 +51,14 @@ class RedisConsumer:
                 logger.error("Missing item_id in payload")
                 return
 
-            # Retrieve the task from database
-            task: Task = await session.scalar(
-                select(Task).where(Task.id == task_id)
-            )
+            task: Task = await session.scalar(select(Task).where(Task.id == task_id))
             if not task:
                 logger.error(f"Task with id {task_id} not found")
                 return
 
-            # Update task status and save
             task.status = TaskStatus.IN_PROGRESS
             await session.commit()
 
-            # Simulate task processing
             logger.info(f"Processing task {task_id}: {task.animal} with text '{task.text}'")
 
             output = replicate.run(
@@ -80,7 +73,6 @@ class RedisConsumer:
 
             uri = await self.upload_image_to_gcs(task, f'{task.id}.png')
 
-            # Update task as completed
             task.status = TaskStatus.DONE
             task.image_uri = uri
             await session.commit()
@@ -89,9 +81,7 @@ class RedisConsumer:
         except Exception as e:
             logger.error(f"Error processing task {task_id}: {str(e)}")
             try:
-                task = await session.scalar(
-                    select(Task).where(Task.id == task_id)
-                )
+                task = await session.scalar(select(Task).where(Task.id == task_id))
                 if task:
                     task.status = TaskStatus.ERROR
                     await session.commit()
@@ -100,28 +90,28 @@ class RedisConsumer:
 
     async def upload_image_to_gcs(self, task: Task, local_file_path: str):
         bucket_name = "pet-tee"
-
         now = datetime.utcnow()
         date_path = now.strftime("%Y/%m/%d")
         full_timestamp = now.strftime("%Y%m%dT%H%M%S%f")
-
         gcs_blob_name = f"{date_path}/{full_timestamp}_{task.id}.png"
 
-        client = storage.Client()
+        try:
+            creds_json = os.environ["GOOGLE_CREDENTIALS_JSON"]
+            creds_dict = json.loads(creds_json)
+            credentials = service_account.Credentials.from_service_account_info(creds_dict)
+        except Exception as e:
+            logger.error(f"Failed to load service account credentials: {e}")
+            raise
+
+        client = storage.Client(credentials=credentials, project=creds_dict.get("project_id"))
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(gcs_blob_name)
-
         blob.upload_from_filename(local_file_path, content_type="image/png")
-
         logger.info(f"Uploaded to gs://{bucket_name}/{gcs_blob_name}")
-
-        # Delete the local file after successful upload
         os.remove(local_file_path)
-
         return f"gs://{bucket_name}/{gcs_blob_name}"
 
     async def listen(self) -> None:
-        """Listen for messages on the Redis queue"""
         if not self.redis_client:
             await self.connect()
 
@@ -131,24 +121,19 @@ class RedisConsumer:
         while self.running and not self.shutdown_event.is_set():
             try:
                 result = await self.redis_client.brpop(self.queue_name, timeout=1)
-
                 if not result:
                     continue
 
                 _, message = result
                 logger.debug(f"Received message: {message}")
-
                 try:
                     data = json.loads(message)
-
                     async with AsyncSessionLocal() as session:
                         await self.process_task(data, session)
-
                 except json.JSONDecodeError:
                     logger.error(f"Failed to decode JSON message: {message}")
                 except Exception as e:
                     logger.error(f"Error processing message: {str(e)}")
-
             except redis.RedisError as e:
                 logger.error(f"Redis error: {str(e)}")
                 await asyncio.sleep(5)
@@ -165,19 +150,15 @@ class RedisConsumer:
                 await asyncio.sleep(1)
 
     async def shutdown(self) -> None:
-        """Gracefully shutdown the consumer"""
         logger.info("Shutting down consumer...")
         self.running = False
         self.shutdown_event.set()
-
         if self.redis_client:
             await self.redis_client.close()
 
 
 async def main() -> None:
-    """Main entry point for the consumer"""
     consumer = RedisConsumer()
-
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, lambda: asyncio.create_task(consumer.shutdown()))
@@ -192,14 +173,6 @@ async def main() -> None:
 
 if __name__ == "__main__":
     load_dotenv()
-
-    if "GOOGLE_CREDENTIALS_JSON" in os.environ:
-        creds_path = "/tmp/gcp-creds.json"
-        parsed = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
-        with open(creds_path, "w") as f:
-            json.dump(parsed, f)
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
-
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
