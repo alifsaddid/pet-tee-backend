@@ -1,33 +1,32 @@
-# ---- Stage 1: Build dependencies ----
+# --- Stage 1: Build dependencies ---
 FROM python:3.11-slim as builder
 
 WORKDIR /app
 
-# Upgrade pip and install dependencies
+# Install build tools and pip
+RUN apt-get update && apt-get install -y build-essential gcc
+
+# Copy dependency file and install packages
 COPY requirements.txt .
 RUN pip install --upgrade pip \
-    && pip install --prefix=/install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir --prefix=/usr/local -r requirements.txt
 
-# ---- Stage 2: Final runtime image ----
+# --- Stage 2: Runtime container ---
 FROM python:3.11-slim
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PATH="/install/bin:$PATH" \
-    PYTHONPATH="/app"
-
-# Create app directory
 WORKDIR /app
 
-# Copy installed packages from builder
-COPY --from=builder /install /install
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Copy source code
+# Copy installed Python packages from builder
+COPY --from=builder /usr/local /usr/local
+
+# Copy your FastAPI app code
 COPY . .
 
-# Expose port for uvicorn
+# Expose FastAPI default port
 EXPOSE 8000
 
-# Start the FastAPI app
+# Start FastAPI app with uvicorn
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
