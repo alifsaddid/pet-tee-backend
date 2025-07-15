@@ -51,13 +51,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(o
     )
 
     token = credentials.credentials
-    if token.startswith('Bearer '):
-        token = token.replace('Bearer ', '', 1)
-    else:
-        raise credentials_exception
 
     payload = decode_access_token(token)
-    print(token)
     if payload is None:
         raise credentials_exception
 
@@ -72,5 +67,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(o
     if user is None:
         raise credentials_exception
 
+    print("HELLO USER", user)
     return user
 

@@ -21,6 +21,7 @@ class TaskCreate(TaskBase):
 
 class TaskResponse(TaskBase):
     status: TaskStatus
+    image_uri: Optional[str] = None
 
     class Config:
         orm_mode = True

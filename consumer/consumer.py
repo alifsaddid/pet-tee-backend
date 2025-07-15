@@ -16,6 +16,9 @@ from app.core.config import settings
 from app.core.db.session import AsyncSessionLocal
 from app.models.task import Task, TaskStatus
 
+from datetime import datetime
+from google.cloud import storage
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -71,14 +74,14 @@ class RedisConsumer:
                 input={"prompt": f"Generate a high-quality, front-facing portrait of a {task.animal} of any breed or species. The animal should be looking directly at the camera with a joyful or expressive face. It must be wearing a plain white shirt that has {task.text} text on it. Optionally, the animal can also wear stylish accessories like a hat, sunglasses, or scarf. Use a minimal, soft background to keep the focus on the animal."}
             )
 
-            # Save the generated image
             with open(f'{task.id}.png', 'wb') as f:
                 f.write(output[0].read())
 
-            print(f"Image saved as {task.id}.png")
+            uri = await self.upload_image_to_gcs(task, f'{task.id}.png')
 
             # Update task as completed
             task.status = TaskStatus.DONE
+            task.image_uri = uri
             await session.commit()
             logger.info(f"Task {task_id} completed successfully")
         except Exception as e:
@@ -93,6 +96,27 @@ class RedisConsumer:
             except Exception as commit_err:
                 logger.error(f"Failed to mark task as error: {str(commit_err)}")
 
+    async def upload_image_to_gcs(self, task: Task, local_file_path: str):
+        bucket_name = "pet-tee"
+
+        now = datetime.utcnow()
+        date_path = now.strftime("%Y/%m/%d")
+        full_timestamp = now.strftime("%Y%m%dT%H%M%S%f")
+
+        gcs_blob_name = f"{date_path}/{full_timestamp}_{task.id}.png"
+
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(gcs_blob_name)
+
+        blob.upload_from_filename(local_file_path, content_type="image/png")
+
+        logger.info(f"Uploaded to gs://{bucket_name}/{gcs_blob_name}")
+
+        # Delete the local file after successful upload
+        os.remove(local_file_path)
+
+        return f"gs://{bucket_name}/{gcs_blob_name}"
 
     async def listen(self) -> None:
         """Listen for messages on the Redis queue"""

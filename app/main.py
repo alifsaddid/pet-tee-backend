@@ -1,8 +1,10 @@
+from dotenv import load_dotenv
 from fastapi import FastAPI, Depends
 from app.routers import health, auth, tasks
 from app.core.redis import get_redis
-import redis.asyncio as redis
+from fastapi.middleware.cors import CORSMiddleware
 
+load_dotenv()
 app = FastAPI(
     title="Pet-Tee API",
     description="Backend for Pet-Tee image generation service",
@@ -15,6 +17,14 @@ app = FastAPI(
         "deepLinking": True,  # Allow direct links to operations
         "displayRequestDuration": True,  # Show request duration
     }
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

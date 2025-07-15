@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     REDIS_URL: str
     SECRET_KEY: str
     REPLICATE_API_TOKEN: str
+    GOOGLE_APPLICATION_CREDENTIALS: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
