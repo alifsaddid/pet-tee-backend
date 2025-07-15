@@ -21,10 +21,6 @@ app = FastAPI(
     }
 )
 
-@app.on_event("startup")
-async def run_migrations():
-    subprocess.run(["alembic", "upgrade", "head"])
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
